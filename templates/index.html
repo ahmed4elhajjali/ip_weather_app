@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <title>Fashion Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            direction: rtl;
+            text-align: right;
+            background-color: #f5f5f5;
+        }
+        .chat-container {
+            width: 500px;
+            margin: 20px auto;
+        }
+        .messages {
+            border: 1px solid #ccc;
+            height: 300px;
+            overflow-y: scroll;
+            padding: 10px;
+            background-color: #fff;
+        }
+        .message {
+            margin-bottom: 10px;
+        }
+        .user {
+            text-align: left;
+            color: blue;
+        }
+        .bot {
+            text-align: right;
+            color: green;
+        }
+        .product-card {
+            border: 1px solid #ccc;
+            background-color: #fff;
+            padding: 10px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .product-card img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h2>بوت الموضة</h2>
+        <div class="messages" id="chat-box">
+            <!-- رسائل البوت والمستخدم -->
+        </div>
+        <input type="text" id="user-input" placeholder="اكتب رسالتك هنا..." style="width: 80%;" />
+        <button onclick="sendMessage()">إرسال</button>
+
+        <h3>اقتراحات منتجات:</h3>
+        <div id="recommendations">
+            {% for product in recommendations %}
+            <div class="product-card">
+                <img src="{{ product.image_url }}" alt="{{ product.name }}">
+                <div>
+                    <h4>{{ product.name }}</h4>
+                    <p>الفئة: {{ product.category }}</p>
+                    <p>السعر: ${{ product.price }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        async function sendMessage() {
+            const userInput = document.getElementById('user-input').value;
+            if (!userInput) return;
+
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML += `<div class="message user">${userInput}</div>`;
+            document.getElementById('user-input').value = '';
+
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: userInput })
+            });
+            const data = await response.json();
+
+            chatBox.innerHTML += `<div class="message bot">${data.reply}</div>`;
+
+            // عرض المنتجات الموصى بها
+            const recDiv = document.getElementById('recommendations');
+            recDiv.innerHTML = '';
+            data.recommendations.forEach(product => {
+                recDiv.innerHTML += `
+                <div class="product-card">
+                    <img src="${product.image_url}" alt="${product.name}">
+                    <div>
+                        <h4>${product.name}</h4>
+                        <p>الفئة: ${product.category}</p>
+                        <p>السعر: $${product.price}</p>
+                    </div>
+                </div>`;
+            });
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
