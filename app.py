@@ -4,8 +4,7 @@ import pandas as pd
 
 app = Flask(__name__)
 WEATHER_API_KEY = "ee3a24feb94b3d71d8948bf67643b510"
-df = pd.read_csv("C:/Users/asd/OneDrive/Desktop/products.csv")
-
+df = pd.read_csv("products.csv")
 # تخزين مؤقت للمدن حسب البلد (عشان ما نعملش طلبات كتير)
 CITIES_CACHE = {}
 
@@ -139,3 +138,4 @@ def update():
 if __name__ == "__main__":
     print("التطبيق شغال! افتح: http://127.0.0.1:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)
+
