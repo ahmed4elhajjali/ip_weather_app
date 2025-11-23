@@ -1,40 +1,125 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>User Info</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>الملابس حسب الطقس - حسب بلدك ومحافظتك</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); min-height: 100vh; font-family: 'Cairo', sans-serif; }
+    .card { border-radius: 20px; backdrop-filter: blur(10px); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); }
+    .price { color: #00ff88; font-weight: bold; }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
+<body class="text-white">
 
-<body class="bg-dark text-white">
-<div class="container mt-5">
-    <h1 class="text-center">🌍 User Information</h1>
-    <hr>
+<div class="container py-4">
+  <h1 class="text-center mb-4 display-5 fw-bold text-warning">
+    الطقس والملابس حسب محافظتك
+  </h1>
 
-    {% if location %}
-        <h3>IP: {{ location.ip }}</h3>
-        <p>📍 City: {{ location.city }}</p>
-        <p>🏙️ Region: {{ location.region }}</p>
-        <p>🇨🇺 Country: {{ location.country }}</p>
-        <p>📡 ISP: {{ location.org }}</p>
-        <p>🗺️ Latitude: {{ location.latitude }}</p>
-        <p>🗺️ Longitude: {{ location.longitude }}</p>
+  <!-- معلومات المستخدم -->
+  <div class="card p-3 mb-4 text-center">
+    <small>
+      تم اكتشافك من الـ IP: <strong>{{ user_location.country_name }}</strong> 
+      ({{ user_location.city }} - {{ user_location.region }})
+    </small>
+  </div>
 
-        <hr>
+  <div class="card p-4 mb-4">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-8">
+        <label class="form-label fw-bold">اختر محافظتك / مدينتك</label>
+        <select id="citySelect" class="form-select form-select-lg">
+          {% for city in cities %}
+            <option value="{{ city }}" {% if city == selected_city %}selected{% endif %}>{{ city }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <button onclick="updateWeather()" class="btn btn-warning btn-lg w-100">تحديث الطقس</button>
+      </div>
+    </div>
+  </div>
 
-        {% if weather %}
-            <h3>🌤 Weather</h3>
-            <p>Temperature: {{ weather.temp }} °C</p>
-            <p>Description: {{ weather.desc }}</p>
-            <p>Humidity: {{ weather.humidity }}%</p>
-            <p>Wind Speed: {{ weather.wind }} m/s</p>
-        {% else %}
-            <h4 class="text-danger">⚠️ Failed to load weather data</h4>
-        {% endif %}
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card p-4 text-center">
+        <h4 id="cityName">{{ selected_city }}</h4>
+        <img id="weatherIcon" src="https://openweathermap.org/img/wn/{{ weather.icon }}@4x.png" width="140">
+        <h1 id="temp" class="display-3 fw-bold">{{ weather.temp }}°</h1>
+        <p id="desc" class="lead">{{ weather.desc }}</p>
+        <div class="row small">
+          <div class="col">الإحساس: <span id="feels">{{ weather.feels_like }}°</span></div>
+          <div class="col">الرطوبة: <span id="humidity">{{ weather.humidity }}%</span></div>
+          <div class="col">الرياح: <span id="wind">{{ weather.wind }} كم/س</span></div>
+        </div>
+      </div>
+    </div>
 
-    {% else %}
-        <h3 class="text-danger">❌ Failed to detect location</h3>
-    {% endif %}
+    <div class="col-lg-8">
+      <div class="card p-4">
+        <h3 class="text-center text-success mb-4">
+          الملابس المناسبة: <span id="category">{{ category }}</span>
+        </h3>
+        <div id="clothesContainer" class="row row-cols-1 row-cols-md-2 g-3">
+          {% for item in clothes %}
+          <div class="col">
+            <div class="card bg-dark text-white h-100 border-info">
+              <div class="card-body d-flex flex-column justify-content-between">
+                <div>
+                  <small class="text-info">كود #{{ item.product_id }}</small>
+                  <p class="mt-1">{{ item.product_name_ar }}</p>
+                </div>
+                <div class="price text-end">{{ "%.2f"|format(item.sell_price) }} جنيه</div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
+
+<script>
+async function updateWeather() {
+    const city = document.getElementById("citySelect").value;
+    const res = await fetch("/update", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({city: city})
+    });
+    const data = await res.json();
+    
+    document.getElementById("cityName").textContent = data.city;
+    document.getElementById("temp").textContent = data.temp + "°";
+    document.getElementById("desc").textContent = data.desc;
+    document.getElementById("weatherIcon").src = `https://openweathermap.org/img/wn/${data.icon}@4x.png`;
+    document.getElementById("feels").textContent = data.feels_like + "°";
+    document.getElementById("humidity").textContent = data.humidity + "%";
+    document.getElementById("wind").textContent = data.wind + " كم/س";
+    document.getElementById("category").textContent = data.category;
+
+    const container = document.getElementById("clothesContainer");
+    container.innerHTML = "";
+    data.clothes.forEach(item => {
+        container.innerHTML += `
+        <div class="col">
+          <div class="card bg-dark text-white h-100 border-info">
+            <div class="card-body d-flex flex-column justify-content-between">
+              <div>
+                <small class="text-info">كود #${item.product_id}</small>
+                <p class="mt-1">${item.product_name_ar}</p>
+              </div>
+              <div class="price text-end">${parseFloat(item.sell_price).toFixed(2)} جنيه</div>
+            </div>
+          </div>
+        </div>`;
+    });
+}
+</script>
+
 </body>
 </html>
