@@ -2,6 +2,25 @@ from flask import Flask, render_template, request, jsonify
 import requests
 import pandas as pd
 
+import pandas as pd
+import os
+
+# تحميل ملف المنتجات بأمان
+CSV_PATH = "products.csv"
+
+if os.path.exists(CSV_PATH):
+    df = pd.read_csv(CSV_PATH)
+    print(f"تم تحميل {len(df)} منتج من products.csv بنجاح!")
+else:
+    print("تحذير: products.csv مش موجود – هيستخدم بيانات وهمية")
+    # بيانات وهمية عشان التطبيق يشتغل حتى لو الملف مش موجود
+    df = pd.DataFrame({
+        'product_id': [101, 102, 103, 104, 105, 106],
+        'product_name_ar': ['تيشيرت قطن صيفي أزرق', 'بنطلون جينز أسود', 'جاكيت شتوي رمادي', 'شورت بحر أخضر', 'قميص كم طويل أبيض', 'فستان صيفي أحمر'],
+        'sell_price': [199.99, 449.50, 899.00, 149.75, 299.00, 399.00],
+        'category': ['لبس صيفي', 'لبس ربيعي', 'لبس شتوي', 'لبس صيفي', 'لبس خريفي', 'لبس صيفي']
+    })
+
 app = Flask(__name__)
 WEATHER_API_KEY = "ee3a24feb94b3d71d8948bf67643b510"
 df = pd.read_csv("products.csv")
@@ -138,4 +157,5 @@ def update():
 if __name__ == "__main__":
     print("التطبيق شغال! افتح: http://127.0.0.1:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
