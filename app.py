@@ -1,79 +1,141 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 import requests
-import os
+import pandas as pd
 
 app = Flask(__name__)
+WEATHER_API_KEY = "ee3a24feb94b3d71d8948bf67643b510"
+df = pd.read_csv("C:/Users/asd/OneDrive/Desktop/products.csv")
 
-# جلب مفتاح OpenWeather من Environment Variable
-WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
+# تخزين مؤقت للمدن حسب البلد (عشان ما نعملش طلبات كتير)
+CITIES_CACHE = {}
 
-# --- دالة لجلب IP المستخدم الحقيقي ---
-def get_real_ip():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if not ip:
-        ip = "127.0.0.1"  # IP افتراضي للتطوير المحلي
-    return ip
+def get_clothing_category(temp):
+    if temp < 10:   return "لبس شتوي"
+    elif temp < 16: return "لبس خريفي"
+    elif temp < 26: return "لبس ربيعي"
+    else:           return "لبس صيفي"
 
-# --- دالة لجلب موقع IP ---
-def get_location(ip):
-    # لو localhost، استخدم موقع افتراضي للتطوير المحلي
-    if ip.startswith("127.") or ip == "localhost":
-        return {
-            "ip": ip,
-            "city": "Cairo",
-            "region": "Cairo Governorate",
-            "country": "Egypt",
-            "latitude": 30.0444,
-            "longitude": 31.2357,
-            "org": "Localhost"
-        }
-    # لو IP خارجي
+def get_client_ip():
+    headers = ['CF-Connecting-IP', 'X-Forwarded-For', 'X-Real-IP']
+    for h in headers:
+        if request.headers.get(h):
+            return request.headers.get(h).split(',')[0].strip()
+    return request.remote_addr or "127.0.0.1"
+
+def get_user_location(ip):
+    if ip.startswith(("127.", "192.168.", "10.", "::1")):
+        return {"country": "Egypt", "country_name": "مصر", "city": "القاهرة", "lat": 30.0444, "lon": 31.2357}
     try:
-        url = f"https://ipapi.co/{ip}/json/"
-        data = requests.get(url, timeout=5).json()
-        if data.get("error"):
-            return None
+        data = requests.get(f"https://ipapi.co/{ip}/json/", timeout=8).json()
+        if data.get("error"): return None
         return {
-            "ip": ip,
-            "city": data.get("city"),
-            "region": data.get("region"),
-            "country": data.get("country_name"),
-            "latitude": data.get("latitude"),
-            "longitude": data.get("longitude"),
-            "org": data.get("org")
+            "country": data.get("country"),
+            "country_name": data.get("country_name", "غير معروف"),
+            "city": data.get("city", "غير معروف"),
+            "region": data.get("region", ""),
+            "lat": data.get("latitude"),
+            "lon": data.get("longitude")
         }
-    except Exception as e:
-        print("Location error:", e)
+    except:
         return None
 
-# --- دالة لجلب الطقس ---
-def get_weather(lat, lon):
-    if not WEATHER_API_KEY:
-        return {"temp": "--", "desc": "No API Key", "humidity": "--", "wind": "--"}
+def get_cities_by_country(country_code):
+    if country_code in CITIES_CACHE:
+        return CITIES_CACHE[country_code]
+    
+    # API مجاني يجيب مدن الدولة (مصر, السعودية, الإمارات, لبنان, الأردن...)
+    url = f"https://countriesnow.space/api/v0.1/countries/cities"
+    payload = {"country": country_code}
     try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-        data = requests.get(url, timeout=5).json()
+        resp = requests.post(url, json=payload, timeout=10).json()
+        if resp.get("error") == False:
+            cities = resp["data"]
+            CITIES_CACHE[country_code] = sorted(cities)
+            return sorted(cities)
+    except: pass
+    
+    # لو فشل → قايمة يدوية لأهم الدول
+    fallback = {
+        "EG": ["القاهرة","الإسكندرية","الجيزة","شرم الشيخ","الغردقة","الأقصر","أسوان","طنطا","المنصورة","أسيوط"],
+        "SA": ["الرياض","جدة","مكة","المدينة المنورة","الدمام","الطائف","القصيم","حائل","تبوك"],
+        "AE": ["دبي","أبوظبي","الشارقة","العين","رأس الخيمة","عجمان","الفجيرة"],
+        "LB": ["بيروت","طرابلس","صيدا","جونية","زلقا","جونيه"],
+        "JO": ["عمان","الزرقاء","إربد","العقبة","السلط"]
+    }
+    cities = fallback.get(country_code, ["القاهرة"])
+    CITIES_CACHE[country_code] = cities
+    return cities
+
+def get_weather(city=None, lat=None, lon=None):
+    try:
+        url = "https://api.openweathermap.org/data/2.5/weather"
+        params = {"appid": WEATHER_API_KEY, "units": "metric", "lang": "ar"}
+        if lat and lon:
+            params.update({"lat": lat, "lon": lon})
+        else:
+            params["q"] = city
+        data = requests.get(url, params=params, timeout=10).json()
+        if data.get("cod") != 200: return None
         return {
-            "temp": data["main"]["temp"],
-            "desc": data["weather"][0]["description"],
+            "temp": int(round(data["main"]["temp"])),
+            "feels_like": int(round(data["main"]["feels_like"])),
+            "desc": data["weather"][0]["description"].capitalize(),
+            "icon": data["weather"][0]["icon"],
             "humidity": data["main"]["humidity"],
-            "wind": data["wind"]["speed"]
+            "wind": round(data.get("wind", {}).get("speed", 0) * 3.6, 1),
+            "city_name": data["name"]
         }
-    except Exception as e:
-        print("Weather error:", e)
-        return {"temp": "--", "desc": "Unknown", "humidity": "--", "wind": "--"}
+    except: return None
 
 @app.route("/")
 def index():
-    user_ip = get_real_ip()
-    location = get_location(user_ip)
+    ip = get_client_ip()
+    user_loc = get_user_location(ip) or {"country": "EG", "country_name": "مصر", "city": "القاهرة"}
     
-    if location and location["latitude"] and location["longitude"]:
-        weather = get_weather(location["latitude"], location["longitude"])
-    else:
-        weather = {"temp": "--", "desc": "Unknown", "humidity": "--", "wind": "--"}
+    country_code = user_loc["country"]
+    cities = get_cities_by_country(country_code)
+    
+    # طقس المدينة اللي اكتشفناها من الـ IP
+    weather = get_weather(lat=user_loc.get("lat"), lon=user_loc.get("lon")) or get_weather(city="القاهرة")
+    selected_city = weather["city_name"] if weather else "القاهرة"
 
-    return render_template("dashboard.html", location=location, weather=weather)
+    category = get_clothing_category(weather["temp"])
+    clothes = df[df["category"] == category].sort_values("sell_price").head(15).to_dict("records")
+    category_name = category.replace("لبس ", "")
+
+    return render_template("dashboard.html",
+        user_location=user_loc,
+        cities=cities,
+        selected_city=selected_city,
+        weather=weather,
+        clothes=clothes,
+        category=category_name,
+        total_clothes=len(clothes)
+    )
+
+# AJAX لتحديث الطقس والملابس لما تختار مدينة جديدة
+@app.route("/update", methods=["POST"])
+def update():
+    city = request.json.get("city")
+    weather = get_weather(city=city)
+    if not weather:
+        return jsonify({"error": "المدينة غير موجودة"}), 404
+    
+    category = get_clothing_category(weather["temp"])
+    clothes = df[df["category"] == category].sort_values("sell_price").head(30).to_dict("records")
+    
+    return jsonify({
+        "city": weather["city_name"],
+        "temp": weather["temp"],
+        "desc": weather["desc"],
+        "icon": weather["icon"],
+        "feels_like": weather["feels_like"],
+        "humidity": weather["humidity"],
+        "wind": weather["wind"],
+        "category": category.replace("لبس ", ""),
+        "clothes": clothes
+    })
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    print("التطبيق شغال! افتح: http://127.0.0.1:5000")
+    app.run(host="0.0.0.0", port=5000, debug=True)
