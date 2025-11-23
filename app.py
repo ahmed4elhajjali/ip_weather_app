@@ -1,30 +1,28 @@
 from flask import Flask, render_template, request, jsonify
 import requests
 import pandas as pd
-
-import pandas as pd
 import os
 
-# تحميل ملف المنتجات بأمان
+app = Flask(__name__)
+
+# مفتاح الطقس (غيّره بمفتاحك من weatherapi.com لو عايز دقة أعلى)
+WEATHER_API_KEY = "ee3a24feb94b3d71d8948bf67643b510"
+
+# تحميل ملف المنتجات بأمان (الحل النهائي)
 CSV_PATH = "products.csv"
 
 if os.path.exists(CSV_PATH):
     df = pd.read_csv(CSV_PATH)
     print(f"تم تحميل {len(df)} منتج من products.csv بنجاح!")
 else:
-    print("تحذير: products.csv مش موجود – هيستخدم بيانات وهمية")
-    # بيانات وهمية عشان التطبيق يشتغل حتى لو الملف مش موجود
+    print("تحذير: products.csv مش موجود → بيستخدم بيانات وهمية")
     df = pd.DataFrame({
-        'product_id': [101, 102, 103, 104, 105, 106],
-        'product_name_ar': ['تيشيرت قطن صيفي أزرق', 'بنطلون جينز أسود', 'جاكيت شتوي رمادي', 'شورت بحر أخضر', 'قميص كم طويل أبيض', 'فستان صيفي أحمر'],
-        'sell_price': [199.99, 449.50, 899.00, 149.75, 299.00, 399.00],
-        'category': ['لبس صيفي', 'لبس ربيعي', 'لبس شتوي', 'لبس صيفي', 'لبس خريفي', 'لبس صيفي']
+        'product_id': [101, 102, 103, 104, 105, 106, 107, 108],
+        'product_name_ar': ['تيشيرت قطن صيفي', 'بنطلون جينز', 'جاكيت شتوي', 'شورت بحر', 'قميص رسمي', 'فستان صيفي', 'هودي خريفي', 'ترينج رياضي'],
+        'sell_price': [199.99, 449.50, 899.00, 149.75, 299.00, 399.00, 599.00, 350.00],
+        'category': ['لبس صيفي', 'لبس ربيعي', 'لبس شتوي', 'لبس صيفي', 'لبس خريفي', 'لبس صيفي', 'لبس خريفي', 'لبس ربيعي']
     })
 
-app = Flask(__name__)
-WEATHER_API_KEY = "ee3a24feb94b3d71d8948bf67643b510"
-df = pd.read_csv("products.csv")
-# تخزين مؤقت للمدن حسب البلد (عشان ما نعملش طلبات كتير)
 CITIES_CACHE = {}
 
 def get_clothing_category(temp):
@@ -36,48 +34,37 @@ def get_clothing_category(temp):
 def get_client_ip():
     headers = ['CF-Connecting-IP', 'X-Forwarded-For', 'X-Real-IP']
     for h in headers:
-        if request.headers.get(h):
-            return request.headers.get(h).split(',')[0].strip()
+        val = request.headers.get(h)
+        if val:
+            return val.split(',')[0].strip()
     return request.remote_addr or "127.0.0.1"
 
 def get_user_location(ip):
     if ip.startswith(("127.", "192.168.", "10.", "::1")):
-        return {"country": "Egypt", "country_name": "مصر", "city": "القاهرة", "lat": 30.0444, "lon": 31.2357}
+        return {"country": "EG", "country_name": "مصر", "city": "القاهرة", "lat": 30.0444, "lon": 31.2357}
     try:
         data = requests.get(f"https://ipapi.co/{ip}/json/", timeout=8).json()
-        if data.get("error"): return None
-        return {
-            "country": data.get("country"),
-            "country_name": data.get("country_name", "غير معروف"),
-            "city": data.get("city", "غير معروف"),
-            "region": data.get("region", ""),
-            "lat": data.get("latitude"),
-            "lon": data.get("longitude")
-        }
-    except:
-        return None
+        if not data.get("error"):
+            return {
+                "country": data.get("country"),
+                "country_name": data.get("country_name", "مصر"),
+                "city": data.get("city", "القاهرة"),
+                "region": data.get("region", ""),
+                "lat": data.get("latitude"),
+                "lon": data.get("longitude")
+            }
+    except: pass
+    return {"country": "EG", "country_name": "مصر", "city": "القاهرة"}
 
 def get_cities_by_country(country_code):
     if country_code in CITIES_CACHE:
         return CITIES_CACHE[country_code]
     
-    # API مجاني يجيب مدن الدولة (مصر, السعودية, الإمارات, لبنان, الأردن...)
-    url = f"https://countriesnow.space/api/v0.1/countries/cities"
-    payload = {"country": country_code}
-    try:
-        resp = requests.post(url, json=payload, timeout=10).json()
-        if resp.get("error") == False:
-            cities = resp["data"]
-            CITIES_CACHE[country_code] = sorted(cities)
-            return sorted(cities)
-    except: pass
-    
-    # لو فشل → قايمة يدوية لأهم الدول
     fallback = {
-        "EG": ["القاهرة","الإسكندرية","الجيزة","شرم الشيخ","الغردقة","الأقصر","أسوان","طنطا","المنصورة","أسيوط"],
-        "SA": ["الرياض","جدة","مكة","المدينة المنورة","الدمام","الطائف","القصيم","حائل","تبوك"],
+        "EG": ["القاهرة","الإسكندرية","الجيزة","شرم الشيخ","الغردقة","الأقصر","أسوان","المنصورة","طنطا","أسيوط"],
+        "SA": ["الرياض","جدة","مكة","المدينة المنورة","الدمام","الطائف","القصيم","حائل","تبوك","الأحساء"],
         "AE": ["دبي","أبوظبي","الشارقة","العين","رأس الخيمة","عجمان","الفجيرة"],
-        "LB": ["بيروت","طرابلس","صيدا","جونية","زلقا","جونيه"],
+        "LB": ["بيروت","طرابلس","صيدا","جونية","زلقا"],
         "JO": ["عمان","الزرقاء","إربد","العقبة","السلط"]
     }
     cities = fallback.get(country_code, ["القاهرة"])
@@ -103,35 +90,32 @@ def get_weather(city=None, lat=None, lon=None):
             "wind": round(data.get("wind", {}).get("speed", 0) * 3.6, 1),
             "city_name": data["name"]
         }
-    except: return None
+    except:
+        return None
 
 @app.route("/")
 def index():
     ip = get_client_ip()
-    user_loc = get_user_location(ip) or {"country": "EG", "country_name": "مصر", "city": "القاهرة"}
-    
+    user_loc = get_user_location(ip)
     country_code = user_loc["country"]
     cities = get_cities_by_country(country_code)
     
-    # طقس المدينة اللي اكتشفناها من الـ IP
     weather = get_weather(lat=user_loc.get("lat"), lon=user_loc.get("lon")) or get_weather(city="القاهرة")
     selected_city = weather["city_name"] if weather else "القاهرة"
-
+    
     category = get_clothing_category(weather["temp"])
-    clothes = df[df["category"] == category].sort_values("sell_price").head(15).to_dict("records")
-    category_name = category.replace("لبس ", "")
-
+    clothes = df[df["category"] == category].sort_values("sell_price").head(20).to_dict("records")
+    
     return render_template("dashboard.html",
         user_location=user_loc,
         cities=cities,
         selected_city=selected_city,
         weather=weather,
         clothes=clothes,
-        category=category_name,
+        category=category.replace("لبس ", ""),
         total_clothes=len(clothes)
     )
 
-# AJAX لتحديث الطقس والملابس لما تختار مدينة جديدة
 @app.route("/update", methods=["POST"])
 def update():
     city = request.json.get("city")
@@ -154,8 +138,7 @@ def update():
         "clothes": clothes
     })
 
+# مهم جدًا لـ Railway
 if __name__ == "__main__":
-    print("التطبيق شغال! افتح: http://127.0.0.1:5000")
-    app.run(host="0.0.0.0", port=5000, debug=True)
-
-
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
